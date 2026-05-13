@@ -16,10 +16,18 @@ except ImportError:
     OpenAI = None
 
 
-GITHUB_REPO = os.getenv("GITHUB_REPO", "deepmodeling/abacus-develop")
+GITHUB_REPO = os.getenv("GITHUB_REPO") or "deepmodeling/abacus-develop"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-HAS_DEEPSEEK_API_KEY = bool(DEEPSEEK_API_KEY and DEEPSEEK_API_KEY.lower() != "none" and OpenAI)
+LLM_API_TYPE = os.getenv("LLM_API_TYPE", "openai-compatible").strip().lower()
+LLM_API_KEY = os.getenv("LLM_API_KEY") or DEEPSEEK_API_KEY
+LLM_API_BASE_URL = os.getenv("LLM_API_BASE_URL") or os.getenv("OPENAI_BASE_URL") or (
+    "https://api.deepseek.com" if DEEPSEEK_API_KEY else ""
+)
+LLM_MODEL = os.getenv("LLM_MODEL") or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+PROMPT_FILE = os.getenv("PR2DECK_PROMPT_FILE", "prompt.txt")
+HAS_LLM_API_KEY = bool(LLM_API_KEY and LLM_API_KEY.lower() != "none" and OpenAI)
+HAS_LLM_CLIENT = HAS_LLM_API_KEY and LLM_API_TYPE in ("openai", "openai-compatible")
 
 HEADERS = {"Authorization": f"token {GITHUB_TOKEN}"} if GITHUB_TOKEN and GITHUB_TOKEN.lower() != "none" else {}
 AVATAR_DIR = "avatars"
@@ -35,10 +43,15 @@ TITLE_WRAP_WIDTH = 34
 DESC_WRAP_WIDTH = 52
 PAGE_LINE_BUDGET = 22
 
-client = (
-    OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
-    if HAS_DEEPSEEK_API_KEY
-    else None
+client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_API_BASE_URL or None) if HAS_LLM_CLIENT else None
+
+DEFAULT_PROMPT = (
+    "你是 ABACUS changelog 网页卡片的文案编辑。"
+    "请把 GitHub Pull Request 的标题和正文改写成适合 16:9 HTML 卡片展示的中文纯文本摘要。"
+    "输出必须只有一段正文，不要标题、列表、编号、Markdown、加粗、代码块、反引号或“根据提供的信息”等套话。"
+    "长度控制在 35 到 65 个中文字符，最多两句话；优先说明改动对象、解决的问题和直接效果。"
+    "如果是 CI、文档或依赖更新，请一句话说明维护目的，不展开上游 changelog。"
+    "ABACUS 是第一性原理计算软件，术语需符合第一性原理计算语境。"
 )
 
 
@@ -87,7 +100,8 @@ def get_model_response_cached(model, messages, params=None, force_refresh=False)
         return ""
 
     cache = load_model_cache()
-    key = model_cache_key(model, messages, params)
+    cache_model = f"{LLM_API_TYPE}:{LLM_API_BASE_URL or 'default'}:{model}"
+    key = model_cache_key(cache_model, messages, params)
     entry = cache.get(key)
     now = int(time.time())
 
@@ -108,6 +122,18 @@ def get_model_response_cached(model, messages, params=None, force_refresh=False)
     cache[key] = {"fetched_at": now, "response": text}
     save_model_cache(cache)
     return text
+
+
+def load_prompt():
+    try:
+        if PROMPT_FILE and os.path.exists(PROMPT_FILE):
+            with open(PROMPT_FILE, "r", encoding="utf-8") as handle:
+                prompt = handle.read().strip()
+                if prompt:
+                    return prompt
+    except OSError:
+        pass
+    return DEFAULT_PROMPT
 
 
 def compact_html_description(text, max_chars=MAX_DESC_CHARS):
@@ -150,24 +176,17 @@ def compact_html_description(text, max_chars=MAX_DESC_CHARS):
 
 
 def fetch_pr_description(pr_info, force_refresh_model=False):
-    if not HAS_DEEPSEEK_API_KEY:
+    if not client:
         return compact_html_description(pr_info.get("body", "") or "")
 
-    system_msg = (
-        "你是 ABACUS changelog 网页卡片的文案编辑。"
-        "请把 GitHub Pull Request 的标题和正文改写成适合 16:9 HTML 卡片展示的中文纯文本摘要。"
-        "输出必须只有一段正文，不要标题、列表、编号、Markdown、加粗、代码块、反引号或“根据提供的信息”等套话。"
-        "长度控制在 35 到 65 个中文字符，最多两句话；优先说明改动对象、解决的问题和直接效果。"
-        "如果是 CI、文档或依赖更新，请一句话说明维护目的，不展开上游 changelog。"
-        "ABACUS 是第一性原理计算软件，术语需符合第一性原理计算语境。"
-    )
+    system_msg = load_prompt()
     user_msg = pr_info.get("title", "") + "\n\n" + pr_info.get("body", "")
     messages = [
         {"role": "system", "content": system_msg},
         {"role": "user", "content": user_msg},
     ]
     text = get_model_response_cached(
-        model="deepseek-chat",
+        model=LLM_MODEL,
         messages=messages,
         params={"temperature": 0.2},
         force_refresh=force_refresh_model,
