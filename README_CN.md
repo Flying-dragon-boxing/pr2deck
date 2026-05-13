@@ -94,3 +94,7 @@ python pr2deck.py --help
 ## 注意
 
 生成的 HTML 文件默认被 Git 忽略。生产环境的 key 不应提交到仓库，建议通过本地脚本或环境变量管理。
+
+## 许可证
+
+本项目采用 BSD 3-Clause License，详见 [LICENSE](LICENSE)。

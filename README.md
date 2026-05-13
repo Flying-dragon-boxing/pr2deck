@@ -94,3 +94,7 @@ Common options:
 ## Notes
 
 Generated HTML files are ignored by default. Keep production credentials out of Git; use local scripts or environment variables for secrets.
+
+## License
+
+This project is licensed under the BSD 3-Clause License. See [LICENSE](LICENSE).
