@@ -19,15 +19,13 @@ except ImportError:
 GITHUB_REPO = os.getenv("GITHUB_REPO") or "deepmodeling/abacus-develop"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-LLM_API_TYPE = os.getenv("LLM_API_TYPE", "openai-compatible").strip().lower()
 LLM_API_KEY = os.getenv("LLM_API_KEY") or DEEPSEEK_API_KEY
 LLM_API_BASE_URL = os.getenv("LLM_API_BASE_URL") or os.getenv("OPENAI_BASE_URL") or (
     "https://api.deepseek.com" if DEEPSEEK_API_KEY else ""
 )
 LLM_MODEL = os.getenv("LLM_MODEL") or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 PROMPT_FILE = os.getenv("PR2DECK_PROMPT_FILE", "prompt.txt")
-HAS_LLM_API_KEY = bool(LLM_API_KEY and LLM_API_KEY.lower() != "none" and OpenAI)
-HAS_LLM_CLIENT = HAS_LLM_API_KEY and LLM_API_TYPE in ("openai", "openai-compatible")
+HAS_LLM_CLIENT = bool(LLM_API_KEY and LLM_API_KEY.lower() != "none" and OpenAI)
 
 HEADERS = {"Authorization": f"token {GITHUB_TOKEN}"} if GITHUB_TOKEN and GITHUB_TOKEN.lower() != "none" else {}
 AVATAR_DIR = "avatars"
@@ -100,7 +98,7 @@ def get_model_response_cached(model, messages, params=None, force_refresh=False)
         return ""
 
     cache = load_model_cache()
-    cache_model = f"{LLM_API_TYPE}:{LLM_API_BASE_URL or 'default'}:{model}"
+    cache_model = f"{LLM_API_BASE_URL or 'default'}:{model}"
     key = model_cache_key(cache_model, messages, params)
     entry = cache.get(key)
     now = int(time.time())
